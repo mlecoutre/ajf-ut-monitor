@@ -1,7 +1,5 @@
-*.class
-
-# Package Files #
-*.jar
-*.war
-*.ear
+target/
+**/.DS_Store
+.idea
+.DS_Store
 *.iml

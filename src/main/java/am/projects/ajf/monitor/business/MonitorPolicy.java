@@ -2,18 +2,16 @@ package am.projects.ajf.monitor.business;
 
 import am.projects.ajf.monitor.Constants;
 import am.projects.ajf.monitor.listeners.MongoListener;
-import com.mongodb.DB;
-import com.mongodb.DBCollection;
-import com.mongodb.DBObject;
+import com.mongodb.*;
 import com.mongodb.util.JSON;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.*;
 import java.text.SimpleDateFormat;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.Scanner;
 
 /**
  * User: mlecoutre
@@ -37,16 +35,48 @@ public class MonitorPolicy implements Constants {
 
     }
 
-    public static long batchInsert(InputStream is, String applicationName) throws IOException {
+    /**
+     * @param applicationName Mongo Collection to request
+     * @throws Exception TODO manage cache or local file storage to avoid to call DB for each request.
+     */
+    public Collection<String> requestDistinctByServiceType(String applicationName, int serviceType, String filterName, String filterValue) throws Exception {
+        String fieldName = null;
+        switch (serviceType) {
+            case SRV_TYPE_FUNCTION:
+                fieldName = FIELD_FUNCTION;
+                break;
+            case SRV_TYPE_UT:
+                fieldName = FIELD_UT;
+                break;
+            case SRV_TYPE_SERVICE:
+                fieldName = FIELD_SERVICE;
+                break;
+        }
+
+        DB db = MongoListener.getMongoDB();
+        DBCollection coll = db.getCollection(applicationName);
+        BasicDBObject filter = null;
+        if (filterName != null)
+            filter = new BasicDBObject(filterName, filterValue);
+
+        try {
+            Collection<String> elements = coll.distinct(fieldName, filter);
+            elements.remove(null);
+            elements.remove("");
+            return elements;
+
+        } catch (Exception e) {
+            logger.error("Request failed", e);
+
+        }
+        return null;
+    }
+
+
+    public long batchInsert(InputStream is, String applicationName) throws IOException {
         long nbElts = 0;
         BufferedReader bufferedReader = null;
-//        URLConnection yc = null;
         try {
-//            URL u = new URL(strUrl);
-//            yc = u.openConnection();
-//            yc.setConnectTimeout(HTTP_TIMEOUT);
-//            yc.setReadTimeout(HTTP_TIMEOUT);
-//            yc.connect();
             bufferedReader = new BufferedReader(new InputStreamReader(is));
             String line;
             DB db = MongoListener.getMongoDB();
@@ -58,8 +88,8 @@ public class MonitorPolicy implements Constants {
             while ((line = bufferedReader.readLine()) != null) {
 
                 DBObject doc = (DBObject) JSON.parse(line);
-
-                collection.insert(doc);
+                if (doc != null)
+                    collection.insert(doc);
             }
             nbElts = collection.count() - before;
         } finally {
@@ -72,5 +102,23 @@ public class MonitorPolicy implements Constants {
             }
         }
         return nbElts;
+    }
+
+    //db.plf_test.find( {"ut_name" : "consulterAPG", "srv_type":"UT", "duration": {"$ne": null}}, {duration:1, "_id": 0});
+    public void averageDuration(String applicationName, String srvType, String collectionName, OutputStream os) throws FileNotFoundException {
+        DB db = MongoListener.getMongoDB();
+        Scanner in = new Scanner(new FileReader(new File(getClass().getResource("/scripts/averageDuration.js").getFile())));
+        StringBuffer buff = new StringBuffer();
+        while(in.hasNextLine()){
+             buff.append(in.nextLine());
+        }
+       CommandResult cr = db.doEval(buff.toString(), srvType, collectionName);
+        logger.info(cr.toString());
+
+        DBCollection collection = db.getCollection(collectionName);
+        Iterator<DBObject> it = collection.find().iterator()  ;
+       while (  it.hasNext()){
+           logger.info(it.next().toString());
+       }
     }
 }
