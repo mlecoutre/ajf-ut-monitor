@@ -8,7 +8,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
-import java.text.SimpleDateFormat;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Scanner;
@@ -36,22 +35,13 @@ public class MonitorPolicy implements Constants {
     }
 
     /**
+     * Get distinct names of service, ut or function
+     *
      * @param applicationName Mongo Collection to request
      * @throws Exception TODO manage cache or local file storage to avoid to call DB for each request.
      */
     public Collection<String> requestDistinctByServiceType(String applicationName, int serviceType, String filterName, String filterValue) throws Exception {
-        String fieldName = null;
-        switch (serviceType) {
-            case SRV_TYPE_FUNCTION:
-                fieldName = FIELD_FUNCTION;
-                break;
-            case SRV_TYPE_UT:
-                fieldName = FIELD_UT;
-                break;
-            case SRV_TYPE_SERVICE:
-                fieldName = FIELD_SERVICE;
-                break;
-        }
+        String fieldName = giveFieldName(serviceType);
 
         DB db = MongoListener.getMongoDB();
         DBCollection coll = db.getCollection(applicationName);
@@ -72,6 +62,22 @@ public class MonitorPolicy implements Constants {
         return null;
     }
 
+    private String giveFieldName(int serviceType) {
+        String fieldName = null;
+        switch (serviceType) {
+            case SRV_TYPE_FUNCTION:
+                fieldName = FIELD_FUNCTION;
+                break;
+            case SRV_TYPE_UT:
+                fieldName = FIELD_UT;
+                break;
+            case SRV_TYPE_SERVICE:
+                fieldName = FIELD_SERVICE;
+                break;
+        }
+        return fieldName;
+    }
+
 
     public long batchInsert(InputStream is, String applicationName) throws IOException {
         long nbElts = 0;
@@ -84,7 +90,7 @@ public class MonitorPolicy implements Constants {
             //Create index  if needed
             //checkIndex(collection);
             long before = collection.count();
-            SimpleDateFormat sdf = new SimpleDateFormat(TIMESTAMP_PATTERN);
+            // SimpleDateFormat sdf = new SimpleDateFormat(TIMESTAMP_PATTERN);
             while ((line = bufferedReader.readLine()) != null) {
 
                 DBObject doc = (DBObject) JSON.parse(line);
@@ -109,16 +115,56 @@ public class MonitorPolicy implements Constants {
         DB db = MongoListener.getMongoDB();
         Scanner in = new Scanner(new FileReader(new File(getClass().getResource("/scripts/averageDuration.js").getFile())));
         StringBuffer buff = new StringBuffer();
-        while(in.hasNextLine()){
-             buff.append(in.nextLine());
+        while (in.hasNextLine()) {
+            buff.append(in.nextLine());
         }
-       CommandResult cr = db.doEval(buff.toString(), srvType, collectionName);
-        logger.info(cr.toString());
+        CommandResult cr = db.doEval(buff.toString(), srvType, collectionName);
+        logger.debug(cr.toString());
 
         DBCollection collection = db.getCollection(collectionName);
-        Iterator<DBObject> it = collection.find().iterator()  ;
-       while (  it.hasNext()){
-           logger.info(it.next().toString());
-       }
+        Iterator<DBObject> it = collection.find().iterator();
+        while (it.hasNext()) {
+            try {
+                os.write(it.next().toString().getBytes());
+            } catch (IOException e) {
+                logger.error("Error during writing on the OutputStream", e);
+            }
+        }
+        try {
+            os.flush();
+        } catch (IOException e) {
+            logger.error("Error during OutputStream flush", e);
+        }
+    }
+
+    public int nbCalls(){
+
+    }
+
+    public void listDurationByName(String applicationName, int srvType, String name, OutputStream os) {
+
+
+        DB db = MongoListener.getMongoDB();
+        DBCollection coll = db.getCollection(applicationName);
+        BasicDBObject filter = new BasicDBObject();
+        String fieldName = giveFieldName(srvType);
+        filter.put(fieldName, name);
+        filter.put("action_type", "end") ;
+        DBCursor cursor = coll.find(filter);
+        try {
+            os.write("[".getBytes());
+            while (cursor.hasNext()) {
+                DBObject obj = cursor.next();
+                Integer duration = (Integer) obj.get("duration");
+                if (duration != null)
+                    os.write(duration.toString().getBytes());
+                if (cursor.hasNext())
+                    os.write(", ".getBytes());
+            }
+            os.write("]".getBytes());
+
+        } catch (Exception e) {
+            logger.error("Error writing on OutputStream", e);
+        }
     }
 }
