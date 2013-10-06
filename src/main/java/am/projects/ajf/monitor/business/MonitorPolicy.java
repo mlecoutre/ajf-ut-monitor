@@ -119,7 +119,7 @@ public class MonitorPolicy implements Constants {
             buff.append(in.nextLine());
         }
         CommandResult cr = db.doEval(buff.toString(), srvType, collectionName);
-        logger.debug(cr.toString());
+        logger.info(cr.toString());
 
         DBCollection collection = db.getCollection(collectionName);
         Iterator<DBObject> it = collection.find().iterator();
@@ -138,7 +138,7 @@ public class MonitorPolicy implements Constants {
     }
 
     public int nbCalls(){
-
+                  return 0;
     }
 
     public void listDurationByName(String applicationName, int srvType, String name, OutputStream os) {
@@ -152,13 +152,14 @@ public class MonitorPolicy implements Constants {
         filter.put("action_type", "end") ;
         DBCursor cursor = coll.find(filter);
         try {
+
             os.write("[".getBytes());
             while (cursor.hasNext()) {
                 DBObject obj = cursor.next();
                 Integer duration = (Integer) obj.get("duration");
                 if (duration != null)
                     os.write(duration.toString().getBytes());
-                if (cursor.hasNext())
+                if (duration != null && cursor.hasNext())
                     os.write(", ".getBytes());
             }
             os.write("]".getBytes());

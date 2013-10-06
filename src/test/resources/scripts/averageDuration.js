@@ -6,10 +6,20 @@ function(srv_type, collectionName){
     else
         key = this.srv_name;
 
-    emit(key, this.duration);
+    var value = {
+           count: 1,
+           duration: this.duration
+    };
+    emit(key, value);
  };
  var reduceF = function(key, values){
-    return  Array.sum(values) / values.length;
+    reducedVal = { count: 0, totalDuration: 0, averageDuration:0 };
+    for (var idx = 0; idx < values.length; idx++) {
+        reducedVal.count += values[idx].count;
+        reducedVal.totalDuration += values[idx].duration;
+    }
+    reducedVal.averageDuration = reducedVal.totalDuration / reducedVal.count;
+    return reducedVal;
  };
 db.plf.mapReduce( mapF, reduceF,
     {
